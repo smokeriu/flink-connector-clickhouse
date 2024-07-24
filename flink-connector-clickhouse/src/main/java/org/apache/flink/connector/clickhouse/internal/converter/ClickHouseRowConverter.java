@@ -239,7 +239,6 @@ public class ClickHouseRowConverter implements Serializable {
                         statement.setObject(
                                 index + 1,
                                 ClickHouseConverterUtils.toExternal(val.getMap(index), type));
-            case MULTISET:
             case ROW:
                 // Tuple in clickhouse store as Array(Or List)
                 // eg: Tuple(name, age) store as List<Object>

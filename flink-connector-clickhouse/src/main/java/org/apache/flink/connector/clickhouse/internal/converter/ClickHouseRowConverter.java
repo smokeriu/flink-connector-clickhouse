@@ -45,6 +45,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.apache.flink.connector.clickhouse.internal.converter.ClickHouseConverterUtils.BOOL_TRUE;
@@ -70,6 +71,7 @@ public class ClickHouseRowConverter implements Serializable {
         this.toExternalConverters = new SerializationConverter[rowType.getFieldCount()];
 
         for (int i = 0; i < rowType.getFieldCount(); i++) {
+            // TODO: Array(Tuple) may slit multiple columns.
             this.toInternalConverters[i] = createToInternalConverter(rowType.getTypeAt(i));
             this.toExternalConverters[i] = createToExternalConverter(logicalTypes[i]);
         }
@@ -146,9 +148,12 @@ public class ClickHouseRowConverter implements Serializable {
                                 ? StringData.fromString(val.toString())
                                 : StringData.fromString((String) val);
             case ARRAY:
+                // TODO: impl for nested(or Array(Tuple)) type
             case MAP:
                 return val -> ClickHouseConverterUtils.toInternal(val, type);
             case ROW:
+                // TODO: impl it
+                return null;
             case MULTISET:
             case RAW:
             default:
@@ -221,6 +226,8 @@ public class ClickHouseRowConverter implements Serializable {
                                 val.getDecimal(index, decimalPrecision, decimalScale)
                                         .toBigDecimal());
             case ARRAY:
+                // TODO: Array(Tuple) (Or Nested) store in multiple columns
+                // eg: Array(Tuple(name, age)) store in two columns. Each of column is List<Object>
                 return (val, index, statement) ->
                         statement.setArray(
                                 index + 1,
@@ -234,6 +241,18 @@ public class ClickHouseRowConverter implements Serializable {
                                 ClickHouseConverterUtils.toExternal(val.getMap(index), type));
             case MULTISET:
             case ROW:
+                // Tuple in clickhouse store as Array(Or List)
+                // eg: Tuple(name, age) store as List<Object>
+                // eg: Tuple(Array(int), name)) store as List<Object>. And the first element is also a list of Int.
+                // eg: Tuple(Array(Tuple(...)), name)) store as List<Object>. And the first element is also a list of Object.
+                return (val, index, statement) -> {
+                    final List<LogicalType> children = type.getChildren();
+                    statement.setObject(
+                            index + 1,
+                            ClickHouseConverterUtils.toExternal(val.getRow(index, children.size()),
+                                    type));
+                };
+            case MULTISET:
             case RAW:
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);

@@ -22,12 +22,14 @@ import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.MapData;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.MapType;
+import org.apache.flink.table.types.logical.RowType;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -39,7 +41,9 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.connector.clickhouse.util.ClickHouseUtil.getFlinkTimeZone;
@@ -111,8 +115,20 @@ public class ClickHouseConverterUtils {
                             toExternal(valueGetter.getElementOrNull(valueArrayData, i), valueType));
                 }
                 return objectMap;
-            case MULTISET:
             case ROW:
+                RowType rowType = (RowType) type;
+                RowData rowData = (RowData) value;
+                final List<RowType.RowField> fields = rowType.getFields();
+                final ArrayList<Object> list = new ArrayList<>(fields.size());
+                for (int i = 0; i < fields.size(); i++) {
+                    final LogicalType fieldType = fields.get(i).getType();
+                    final RowData.FieldGetter fieldGetter = RowData.createFieldGetter(fieldType, i);
+                    list.add(
+                            toExternal(fieldGetter.getFieldOrNull(rowData), fieldType)
+                    );
+                }
+                return list;
+            case MULTISET:
             case RAW:
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);
